@@ -1,0 +1,20 @@
+# Virtual environment
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Fichiers de configuration sensibles
+.env
+
+# IDE
+.vscode/
+# Données / fichiers volumineux
+Data/
+*.pdf
+*.csv
+*.xlsx
+*.txt
+*.log
+
