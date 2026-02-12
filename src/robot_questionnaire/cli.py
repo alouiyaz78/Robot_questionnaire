@@ -6,11 +6,11 @@ from robot_questionnaire.loaders import list_files, read_file
 from robot_questionnaire.chunker import chunk_text, normalize_text
 from robot_questionnaire.qcm import (
     build_client,
+    normalize_instructions,
     generate_questions_for_chunk,
     generate_answer_key,
     build_final_qcm,
 )
-
 from robot_questionnaire.io_utils import make_run_dir, write_text, write_json
 
 
@@ -32,21 +32,19 @@ def parse_args():
     p.add_argument("--seed", type=int, default=42, help="Graine aléatoire")
     p.add_argument("--outdir", default="outputs", help="Dossier de sortie (par défaut: outputs)")
 
+    # ✅ Consignes depuis un document
+    p.add_argument("--consignes", help="Fichier (pdf/txt/docx) de consignes à appliquer", default=None)
+    p.add_argument("--no-normalize-consignes", action="store_true", help="Ne pas résumer/normaliser les consignes")
+
     # ✅ Mode quiz
     p.add_argument("--interactive", action="store_true", help="Pose le QCM dans la console et calcule le score")
     p.add_argument("--pass-rate", type=float, default=0.60, help="Seuil de réussite (ex: 0.60 = 60%)")
-    p.add_argument("--export-qa", action="store_true", help="Génère un fichier Questions+Réponses (rapport final)")
+    p.add_argument("--export-qa", action="store_true", help="Génère un rapport final Questions+Réponses+Tes réponses")
 
     return p.parse_args()
 
 
 def parse_answer_key(corrige_text: str) -> Dict[int, str]:
-    """
-    Attend un format:
-    1: A
-    2: Vrai
-    ...
-    """
     key = {}
     for line in corrige_text.splitlines():
         line = line.strip()
@@ -115,18 +113,19 @@ def run_interactive(qcm_text: str, corrige_text: str, pass_rate: float) -> Tuple
     return score, errors, user_answers
 
 
-def build_qa_report_md(qcm_text: str, corrige_text: str, user_answers: Dict[int, str], score: float, pass_rate: float) -> str:
+def build_qa_report_md(qcm_text: str, corrige_text: str, user_answers: Dict[int, str], score: float, pass_rate: float, consignes: str) -> str:
     key = parse_answer_key(corrige_text)
     pct = round(score * 100, 2)
     threshold = round(pass_rate * 100, 2)
     status = "RÉUSSI ✅" if score >= pass_rate else "ÉCHEC ❌"
 
-    # tableau réponses
     lines = ["| # | Ta réponse | Bonne réponse |", "|---:|:---------:|:------------:|"]
     for qn in sorted(key.keys()):
         ua = user_answers.get(qn, "")
         lines.append(f"| {qn} | {ua} | {key[qn]} |")
     table = "\n".join(lines)
+
+    consignes_block = consignes.strip() if consignes.strip() else "(aucune)"
 
     return f"""# Rapport QCM
 
@@ -134,6 +133,9 @@ def build_qa_report_md(qcm_text: str, corrige_text: str, user_answers: Dict[int,
 - Score: **{pct}%**
 - Seuil: **{threshold}%**
 - Statut: **{status}**
+
+## Consignes appliquées
+{consignes_block}
 
 ---
 
@@ -189,13 +191,30 @@ def main():
 
     client = build_client()
 
+    # ✅ Consignes depuis un doc (facultatif)
+    consignes_final = ""
+    if args.consignes:
+        raw = read_file(args.consignes)
+        if args.no_normalize_consignes:
+            consignes_final = raw
+        else:
+            consignes_final = normalize_instructions(client, raw, lang=args.lang)
+        print("✅ Consignes chargées.")
+
     print("🤖 Génération des questions...")
     blocks = []
     for idx, c in enumerate(chunks):
         n = per_chunk + (1 if idx < leftover else 0)
-        blocks.append(generate_questions_for_chunk(client, c, n=n, lang=args.lang))
+        blocks.append(
+            generate_questions_for_chunk(
+                client,
+                c,
+                n=n,
+                lang=args.lang,
+                instructions=consignes_final
+            )
+        )
 
-    # ✅ QCM final: mélange + sélection + renumérotation 1..N
     qcm_text = build_final_qcm(blocks, target_n=args.n_questions, seed=args.seed)
     if not qcm_text.strip():
         print("⚠️ QCM vide (problème génération).")
@@ -209,6 +228,7 @@ def main():
     write_text(f"{run_dir}/extracted.txt", full_text)
     write_text(f"{run_dir}/qcm.md", qcm_text)
     write_text(f"{run_dir}/corrige.md", corrige)
+    write_text(f"{run_dir}/consignes.txt", consignes_final if consignes_final.strip() else "")
 
     score = 0.0
     user_answers: Dict[int, str] = {}
@@ -217,7 +237,7 @@ def main():
         score, _, user_answers = run_interactive(qcm_text, corrige, pass_rate=args.pass_rate)
 
     if args.export_qa:
-        report = build_qa_report_md(qcm_text, corrige, user_answers, score, pass_rate=args.pass_rate)
+        report = build_qa_report_md(qcm_text, corrige, user_answers, score, pass_rate=args.pass_rate, consignes=consignes_final)
         write_text(f"{run_dir}/rapport_qcm.md", report)
         print(f"📄 Rapport généré: {run_dir}/rapport_qcm.md")
 
