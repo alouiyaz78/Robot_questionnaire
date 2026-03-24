@@ -1,3 +1,4 @@
+import json
 import os
 from typing import List
 import PyPDF2
@@ -8,11 +9,10 @@ except ImportError:
     docx = None
 
 
-SUPPORTED_EXTS = {".pdf", ".txt", ".docx"}
+SUPPORTED_EXTS = {".pdf", ".txt", ".docx", ".py", ".ipynb"}
 
 
 def list_files(inputs: List[str]) -> List[str]:
-    """Accepte fichiers ou dossiers, retourne la liste de fichiers supportés."""
     files = []
     for p in inputs:
         p = os.path.expanduser(p)
@@ -26,10 +26,7 @@ def list_files(inputs: List[str]) -> List[str]:
             ext = os.path.splitext(p)[1].lower()
             if ext in SUPPORTED_EXTS:
                 files.append(p)
-        else:
-            # ignore silently; handled by CLI logging
-            pass
-    # remove duplicates while keeping order
+
     seen = set()
     out = []
     for f in files:
@@ -60,6 +57,26 @@ def read_docx(path: str) -> str:
     return "\n".join(p.text for p in d.paragraphs) + "\n"
 
 
+def read_py(path: str) -> str:
+    with open(path, "r", encoding="utf-8", errors="ignore") as f:
+        return f.read() + "\n"
+
+
+def read_ipynb(path: str) -> str:
+    with open(path, "r", encoding="utf-8", errors="ignore") as f:
+        nb = json.load(f)
+
+    texts = []
+    for cell in nb.get("cells", []):
+        source = cell.get("source", [])
+        if isinstance(source, list):
+            texts.append("".join(source))
+        elif isinstance(source, str):
+            texts.append(source)
+
+    return "\n\n".join(texts) + "\n"
+
+
 def read_file(path: str) -> str:
     ext = os.path.splitext(path)[1].lower()
     if ext == ".pdf":
@@ -68,4 +85,8 @@ def read_file(path: str) -> str:
         return read_txt(path)
     if ext == ".docx":
         return read_docx(path)
+    if ext == ".py":
+        return read_py(path)
+    if ext == ".ipynb":
+        return read_ipynb(path)
     return ""
