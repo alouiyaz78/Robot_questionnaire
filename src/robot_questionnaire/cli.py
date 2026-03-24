@@ -146,10 +146,30 @@ def _score_question(q: Dict[str, Any], user_answer: Any) -> Tuple[float, float]:
         return (pts, pts) if str(user_answer).strip() == str(ans).strip() else (0.0, pts)
 
     if qtype == "multi_select":
-        # compare ensembles (ordre non important)
-        if isinstance(ans, list) and isinstance(user_answer, list):
-            return (pts, pts) if set(user_answer) == set(ans) else (0.0, pts)
-        return (0.0, pts)
+        # ✅ Scoring partiel:
+        # + (pts/nb_bonnes) pour chaque bonne réponse cochée
+        # - (pts/nb_bonnes) pour chaque mauvaise réponse cochée
+        # pas de pénalité pour les bonnes réponses oubliées
+        # score borné [0, pts]
+        if not (isinstance(ans, list) and isinstance(user_answer, list)):
+            return (0.0, pts)
+
+        correct_set = set(str(x).strip() for x in ans)
+        user_set = set(str(x).strip() for x in user_answer)
+
+        if not correct_set:
+            return (0.0, pts)
+
+        step = pts / len(correct_set)
+
+        good = len(user_set & correct_set)
+        bad = len(user_set - correct_set)
+
+        score = (good * step) - (bad * step)
+        score = max(0.0, min(pts, score))
+
+        return (score, pts)
+
 
     if qtype == "matching":
         if isinstance(ans, dict) and isinstance(user_answer, dict):
