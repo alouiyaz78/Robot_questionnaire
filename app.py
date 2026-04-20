@@ -475,7 +475,6 @@ with gr.Blocks(title="Robot Questionnaire - Gradio") as demo:
             return
 
         consignes_final = quiz_data.get("consignes_final", "")
-        deadline_ts = float(quiz_data.get("deadline_ts", 0.0))
 
         if consignes_final:
             with gr.Accordion("Consignes appliquées", open=False):
@@ -510,12 +509,18 @@ with gr.Blocks(title="Robot Questionnaire - Gradio") as demo:
                     answer_specs.append({"type": "multi", "q_index": idx})
 
                 elif qtype == "matching":
-                    gr.Markdown("Associez chaque élément :")
-                    for left_item in question.get("left", []):
+                    gr.Markdown("**Associez chaque élément avec la bonne proposition :**")
+
+                    right_choices = question.get("right", [])
+                    formatted_choices = [f"{i+1}. {choice}" for i, choice in enumerate(right_choices)]
+
+                    for left_pos, left_item in enumerate(question.get("left", []), start=1):
                         comp = gr.Dropdown(
-                            question.get("right", []),
-                            label=left_item,
+                            choices=formatted_choices,
+                            label=f"{left_pos}. {left_item}",
                             multiselect=False,
+                            value=None,
+                            allow_custom_value=False,
                         )
                         answer_components.append(comp)
                         answer_specs.append(
@@ -523,6 +528,7 @@ with gr.Blocks(title="Robot Questionnaire - Gradio") as demo:
                                 "type": "matching_item",
                                 "q_index": idx,
                                 "left_item": left_item,
+                                "right_choices": right_choices,
                             }
                         )
 
@@ -560,8 +566,15 @@ with gr.Blocks(title="Robot Questionnaire - Gradio") as demo:
                 elif spec["type"] == "matching_item":
                     if q_index not in user_answers or not isinstance(user_answers[q_index], dict):
                         user_answers[q_index] = {}
+
                     if raw:
-                        user_answers[q_index][spec["left_item"]] = raw
+                        raw_str = str(raw)
+                        if ". " in raw_str:
+                            _, selected_text = raw_str.split(". ", 1)
+                        else:
+                            selected_text = raw_str
+
+                        user_answers[q_index][spec["left_item"]] = selected_text
 
             gained, total, details = compute_total_score(questions_local, user_answers)
             summary = build_result_markdown(

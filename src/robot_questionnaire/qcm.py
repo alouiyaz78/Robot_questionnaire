@@ -111,6 +111,57 @@ def filter_non_autonomous_questions(questions: List[Dict[str, Any]]) -> List[Dic
     return out
 
 
+def clean_matching_questions(questions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    cleaned: List[Dict[str, Any]] = []
+
+    for q in questions:
+        if q.get("type") != "matching":
+            cleaned.append(q)
+            continue
+
+        left = q.get("left", [])
+        right = q.get("right", [])
+        answer = q.get("answer", {})
+
+        if not isinstance(left, list) or not isinstance(right, list) or not isinstance(answer, dict):
+            continue
+
+        unique_right = []
+        for item in right:
+            s = str(item).strip()
+            if s and s not in unique_right:
+                unique_right.append(s)
+
+        unique_left = []
+        for item in left:
+            s = str(item).strip()
+            if s and s not in unique_left:
+                unique_left.append(s)
+
+        normalized_answer = {}
+        used_right = set()
+        for k, v in answer.items():
+            ks = str(k).strip()
+            vs = str(v).strip()
+            if ks and vs and ks in unique_left and vs in unique_right and vs not in used_right:
+                normalized_answer[ks] = vs
+                used_right.add(vs)
+
+        if len(unique_left) < 2:
+            continue
+        if len(unique_right) != len(unique_left):
+            continue
+        if len(normalized_answer) != len(unique_left):
+            continue
+
+        q["left"] = unique_left
+        q["right"] = unique_right
+        q["answer"] = normalized_answer
+        cleaned.append(q)
+
+    return cleaned
+
+
 def _difficulty_rules(difficulty: str, lang: str) -> str:
     if difficulty == "facile":
         return f"""
@@ -186,6 +237,12 @@ Schéma:
   ]
 }}
 
+Règles spécifiques pour "matching":
+- "left" et "right" doivent avoir la même longueur
+- chaque valeur de "right" doit être unique
+- chaque clé de "answer" doit pointer vers une valeur différente de "right"
+- ne pas générer de matching si le contenu ne permet pas de créer des associations distinctes de bonne qualité
+
 Contraintes globales:
 - Interdit: questions ouvertes, réponses libres, dissertations
 - Chaque question doit être autonome
@@ -217,6 +274,10 @@ Règles de qualité:
 - Pas deux questions sur exactement la même idée
 - Les options doivent être en texte, pas en A/B/C/D
 - Pour les questions de type matching, produire exactement 3 ou 4 associations cohérentes
+- Chaque élément de "left" doit correspondre à une réponse différente dans "right"
+- Les éléments de "right" doivent être tous distincts, non redondants et non paraphrasés de façon quasi identique
+- Interdit de répéter la même définition ou presque la même réponse dans plusieurs options de "right"
+- Les associations doivent être claires et sans ambiguïté
 - Pour les scénarios, écrire "SCÉNARIO :" au début du texte
 """.strip()
 
@@ -246,10 +307,10 @@ def build_final_exam(
     for block in questions_blocks:
         all_qs.extend(block)
 
-    # sécurité: filtrage qualité
     all_qs = [q for q in all_qs if q.get("type") in {"true_false", "mcq_single", "multi_select", "matching"}]
     all_qs = filter_non_autonomous_questions(all_qs)
     all_qs = deduplicate_questions(all_qs, similarity_threshold=0.88)
+    all_qs = clean_matching_questions(all_qs)
 
     random.seed(seed)
     random.shuffle(all_qs)
