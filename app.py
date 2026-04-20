@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 import sys
 import time
 import uuid
@@ -258,7 +257,7 @@ def generate_quiz(
     if not doc_paths:
         raise gr.Error("Importe au moins un document valide.")
 
-    os.environ["OPENAI_API_KEY"] = api_key.strip()
+    client = build_client(api_key)
 
     texts = []
     errors = []
@@ -276,8 +275,6 @@ def generate_quiz(
     full_text = normalize_text("\n".join(texts))
     if not full_text.strip():
         raise gr.Error("Aucun texte exploitable après extraction.")
-
-    client = build_client()
 
     consignes_final = ""
     if consignes_file:
@@ -400,6 +397,9 @@ with gr.Blocks(title="Robot Questionnaire - Gradio") as demo:
     gr.Markdown(
         "Génération de QCM à partir de documents, passage du questionnaire, score et correction des erreurs."
     )
+    gr.Markdown(
+        "Votre clé OpenAI est utilisée uniquement pour cette session et n'est pas stockée."
+    )
 
     with gr.Row():
         with gr.Column(scale=1):
@@ -476,8 +476,6 @@ with gr.Blocks(title="Robot Questionnaire - Gradio") as demo:
 
         consignes_final = quiz_data.get("consignes_final", "")
         deadline_ts = float(quiz_data.get("deadline_ts", 0.0))
-        pass_rate = float(quiz_data.get("pass_rate", 0.6))
-        run_dir = quiz_data.get("run_dir", "outputs")
 
         if consignes_final:
             with gr.Accordion("Consignes appliquées", open=False):
@@ -605,5 +603,6 @@ with gr.Blocks(title="Robot Questionnaire - Gradio") as demo:
             inputs=answer_components + [quiz_state],
             outputs=[result_state, result_md, user_docx_file],
         )
+
 
 demo.launch()

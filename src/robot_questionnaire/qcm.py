@@ -6,16 +6,11 @@ from typing import Any, Dict, List
 from openai import OpenAI
 
 
-def build_client() -> OpenAI:
-    import os
-    from dotenv import load_dotenv
+def build_client(api_key: str) -> OpenAI:
+    if not api_key or not api_key.strip():
+        raise RuntimeError("Clé API OpenAI introuvable ou vide.")
 
-    load_dotenv()
-    api_key = os.getenv("OPENAI_API_KEY")
-    if not api_key:
-        raise RuntimeError("OPENAI_API_KEY introuvable. Ajoute-la dans .env")
-
-    return OpenAI(api_key=api_key)
+    return OpenAI(api_key=api_key.strip())
 
 
 def normalize_instructions(client: OpenAI, raw: str, lang: str = "fr") -> str:
