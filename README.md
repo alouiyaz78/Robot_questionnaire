@@ -49,6 +49,14 @@ The application allows users to:
 - Markdown (QCM + corrigé)
 - DOCX (questionnaire + correction)
 - JSON (sources, answers)
+### Deployment
+
+This application is deployed to production on Hugging Face Spaces via Gradio.
+
+**Try the live app:** [Quiz Generator — Hugging Face Spaces](https://huggingface.co/spaces/alouiyaz78/robot_questionnaire)
+
+The app runs in a Docker container managed by Hugging Face Spaces, using Gradio 5.49.1 on Python 3.12.
+It is publicly accessible and automatically updated on every push to the repo.
 
 ---
 
